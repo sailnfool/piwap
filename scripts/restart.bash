@@ -118,7 +118,8 @@ fi
 # The command line options which are documented by the USAGE
 # string.  Best seen by running: "restart -h"
 #####################################################################
-optionargs="hrv:n:f:c:s:p:"
+optionargs="hrov:n:f:c:s:p:"
+optionalpackages=0
 
 while getopts ${optionargs} name
 do
@@ -129,6 +130,9 @@ do
 			;;
 		n)
 			numclients="${OPTARG}"
+			;;
+		o)
+			optionalpackages=1
 			;;
 		f)
 			defaultclient="${OPTARG}"
@@ -171,9 +175,14 @@ topclient=$(expr ${lowclient} \+ ${numclients} \- 1)
 # This is the list of packages I find generally useful.
 # only the last set of packages are needed for the WiFi setup
 #####################################################################
-# PLIST="dos2unix synaptic vim-gtk3 clang autoconf gdebi"
-# PLIST="$PLIST doxygen asciidoc asciidoctor ps2eps ghostscript"
-PLIST="$PLIST hostapd dnsmasq bridge-utils"
+PLIST="${PLIST} hostapd dnsmasq bridge-utils"
+if [ ${optionalpackages} -eq 1 ]
+then
+	PLIST="${PLIST} dos2unix synaptic vim-gtk3 clang autoconf gdebi"
+	PLIST="${PLIST} doxygen asciidoc asciidoctor ps2eps ghostscript"
+	PLIST="${PLIST} indent"
+fi
+
 
 #####################################################################
 # STEP 0-A - not explicitly in the article
