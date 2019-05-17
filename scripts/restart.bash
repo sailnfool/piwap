@@ -180,7 +180,7 @@ if [ ${optionalpackages} -eq 1 ]
 then
 	PLIST="${PLIST} dos2unix synaptic vim-gtk3 clang autoconf gdebi"
 	PLIST="${PLIST} doxygen asciidoc asciidoctor ps2eps ghostscript"
-	PLIST="${PLIST} indent"
+	PLIST="${PLIST} indent libtool automake autoconf"
 fi
 
 
