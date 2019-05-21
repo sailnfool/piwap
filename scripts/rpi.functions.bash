@@ -427,27 +427,27 @@ then
 			numparms=4
 			if [ $# -lt ${numparms} ]
 			then
-				insufficient "verifychange" $LINENO "verifychange" ${numparms}
+				insufficient ${FUNCNAME} $LINENO ${FUNCNAME} ${numparms}
 			fi
 			changename=$1
 			if [ "${changename}" = "" ]
 			then
-				nullparm "verifychange" ${LINENO} 1
+				nullparm ${FUNCNAME} ${LINENO} 1
 			fi
 			origfile=$2
 			if [ "${origfile}" = "" ]
 			then
-				nullparm "verifychange" ${LINENO} 1
+				nullparm ${FUNCNAME} ${LINENO} 1
 			fi
 			destfile=$3
 			if [ "${destfile}" = "" ]
 			then
-				nullparm "verifychange" ${LINENO} 1
+				nullparm ${FUNCNAME} ${LINENO} 1
 			fi
 			sequence=$4
 			if [ "${sequence}" = "" ]
 			then
-				nullparm "verifychange" ${LINENO} 1
+				nullparm ${FUNCNAME} ${LINENO} 1
 			fi
 		
 			echo "Verify ${changename}" | tee /tmp/${sequence}.${changename}.$$.debug.txt
