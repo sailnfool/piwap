@@ -104,6 +104,7 @@ USAGE="\r\n${scriptname} [-[dh]] [ -c <class3network> ] [-n <#>]\r\n
 \t\t\t\tthat will be configured for the WiFi\r\n
 \t-s\t<SSID>\t\tOverride the default value of ${SSID} for the\r\n
 \t\t\t\taccess point name\r\n
+\t-o\t\tEnable installation of optional packages\r\n
 \t-p\t<password>\toverride the default value of the WPA Passphrase\r\n
 \t-r\t\t\tdisable removal of packages before installation\r\n
 \t-v\t<#>\t\tEnable verbose mode; 0=none, higher digits more verbose\r\n
@@ -268,10 +269,10 @@ then
 	DHCPNEW="/tmp/$(basename ${DHCPCONFIG}).$$.new"
 	DHCPCOPY="/tmp/$(basename ${DHCPCONFIG}).$$.copy"
 	DHCPGROUP="netdev"
-	if [ "${skip_remove}" = "0" ]
-	then
-		sudo rm -rf ${DHCPORIG}
-	fi
+#	if [ "${skip_remove}" = "0" ]
+#	then
+#		sudo rm -rf ${DHCPORIG}
+#	fi
 	
 	if [ ! -r ${DHCPORIG} ]
 	then
@@ -489,6 +490,133 @@ then
 	sudo systemctl enable hostapd
 	sudo systemctl start hostapd
 	sudo systemctl start dnsmasq
+	
+	verifychange "NETINTER" ${NETINTERORIG} ${NETINTER} "07"
+else
+	##########
+	# At this point we will NOT be installing the Wireless Access Point(WAP)
+	##########
+	DHCPCONFIG="/etc/dhcpcd.conf"
+	DHCPORIG=${DHCPCONFIG}.orig
+#	if [ "${skip_remove}" = "0" ]
+#	then
+#		sudo rm -rf ${DHCPORIG}
+#	fi
+	
+	if [ -r ${DHCPORIG} ]
+	then
+		##########
+		# restore the config file from the ".orig"
+		##########
+		sudo cp ${DHCPORIG} ${DHCPCONFIG}
+		DHCPGROUP="netdev"
+		sudo chmod g+w ${DHCPCONFIG}
+		sudo chgrp ${DHCPGROUP} ${DHCPCONFIG}
+	fi
+	verifychange "DHCP" ${DHCPORIG} ${DHCPCONFIG} "01"
+	
+	#####################################################################
+	# Step - 4 Configure the DHCP server (dnsmasq)
+	#
+	# Configure DNS MASQ
+	# Note the use fo the command line arguments.  Note that this script
+	# only handles class 3 networks.  A potential future bug
+	#####################################################################
+	DNSMASQ="/etc/dnsmasq.conf"
+	if [ ! -r ${DNSMASQ}.orig ]
+	then
+		sudo cp ${DNSMASQ}.orig ${DNSMASQ}
+		sudo chmod 644 ${DNSMASQ}
+		sudo chown root ${DNSMASQ}
+		sudo chgrp root ${DNSMASQ}
+	fi
+	verifychange "DNSMASQ" ${DNSMASQ}.orig ${DNSMASQ} "02"
+	
+	#####################################################################
+	# STEP - 5 Configure the access point host software (hostapd)
+	#
+	# Configure the access point software
+	#####################################################################
+	HOSTAPD="/etc/default/hostapd"
+	HOSTAPDCONF="/etc/hostapd/hostapd.conf"
+	
+	if [ -r ${HOSTAPD}.orig ]
+	then
+		sudo cp ${HOSTAPD}.orig ${HOSTAPD}
+	fi
+	if [ -r ${HOSTAPDCONF}.orig ]
+	then
+		sudo cp ${HOSTAPDCONF}.orig ${HOSTAPDCONF}
+		sudo chmod 644 ${HOSTAPDCONF}
+	fi
+	verifychange "HOSTAPD" "${HOSTAPD}.orig" "${HOSTAPD}" "03"
+	verifychange "HOSTAPDCONF" "${HOSTAPDCONF}.orig" "${HOSTAPDCONF}" "03A"
+	
+	#####################################################################
+	# STEP 6 - Set up traffic forwarding
+	#
+	# Set up Traffic Forwarding
+	#####################################################################
+	SYSCTLCONF="/etc/sysctl.conf"
+	SYSCTLCONFORIG="${SYSCTLCONF}.orig"
+	if [ -r ${SYSCTLCONFORIG} ]
+	then
+		sudo cp ${SYSCTLCONFORIG} ${SYSCTLCONF}
+		sudo chown root ${SYSCTLCONF}
+		sudo chgrp root ${SYSCTLCONF}
+		sudo chmod 755 ${SYSCTLCONF}
+	fi
+	verifychange "SYSCTL" ${SYSCTLCONFORIG} ${SYSCTLCONF} "04"
+	
+	#####################################################################
+	# STEP 7 - Add a new iptables rule
+	#####################################################################
+	IP4TABLES="/etc/iptables.ipv4.nat"
+	RCLOCAL="/etc/rc.local"
+	RCLOCALNEW=/tmp/$(basename ${RCLOCAL}).new
+	RCLOCALORIG="${RCLOCAL}.orig"
+	if [ -r ${IP4TABLES}.orig ]
+	then
+		sudo iptables-restore < ${IP4TABLES}.orig
+	fi
+	if [ -r ${RCLOCALORIG} ]
+	then
+		sudo cp ${RCLOCALORIG} ${RCLOCAL}
+		sudo chown root ${RCLOCAL}
+		sudo chgrp root ${RCLOCAL}
+	
+		#####################################################################
+		# Make sure that the execute bits are turned on for rc.local or it
+		# will never be run.
+		#####################################################################
+		sudo chmod 744 ${RCLOCAL}
+	fi
+	
+	verifychange "RCLOCAL" ${RCLOCALORIG} ${RCLOCAL} "05"
+	
+	verifychange "IP4TABLES" ${IP4TABLES}.orig ${IP4TABLES} "06"
+	
+	#####################################################################
+	# restore the network interfaces for bridging
+	#####################################################################
+	NETINTER="/etc/network/interfaces"
+	NETINTERORIG="${NETINTER}.orig"
+	if [ -r ${NETINTERORIG} ]
+	then
+		sudo cp ${NETINTERORIG} ${NETINTER}
+		sudo chown root ${NETINTER}
+		sudo chgrp root ${NETINTER}
+	fi
+	
+	#####################################################################
+	# I found this solution in:
+	# https://www.raspberrypi.org/forums/viewtopic.php?t=235598
+	# This solved a problem that I had been having for days!
+	#####################################################################
+#	sudo systemctl unmask hostapd
+	sudo systemctl disable hostapd
+	sudo systemctl stop hostapd
+	sudo systemctl stop dnsmasq
 	
 	verifychange "NETINTER" ${NETINTERORIG} ${NETINTER} "07"
 fi
