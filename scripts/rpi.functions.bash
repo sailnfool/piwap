@@ -178,13 +178,17 @@ then
 	rpidir=${rpidir:-"/usr/var/rpi"}
 	rpibindir=${rpibindir:-"${rpidir}/bin"}
 	export rpidir rpibindir
-	mkdir -p ${rpidir} ${rpibindir}
+	sudo mkdir -p ${rpidir} ${rpibindir}
 	
 	##################
 	# add the rpibindir to $PATH
 	##################
-	pathmunge ${rpibindir} after
-	
+	fgrep -q "pathmunge ${rpibindir} after" $HOME/.bashrc
+	if [ $? -eq 1 ]
+	then
+		echo pathmunge ${rpibindir} after >> $HOME/.bashrc
+	fi
+	source $HOME/.bashrc
 	##################
 	# This is the directory where rpi commands will put 
 	# temporary or diagnostic information.

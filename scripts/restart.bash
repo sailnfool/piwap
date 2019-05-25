@@ -106,7 +106,8 @@ USAGE="\r\n${scriptname} [-[dh]] [ -c <class3network> ] [-n <#>]\r\n
 \t\t\t\taccess point name\r\n
 \t-p\t<password>\toverride the default value of the WPA Passphrase\r\n
 \t-r\t\t\tdisable removal of packages before installation\r\n
-\t-v\t<#>\t\tEnable verbose mode; 0=none, higher digits more verbose\r\n"
+\t-v\t<#>\t\tEnable verbose mode; 0=none, higher digits more verbose\r\n
+\t-w\t\t\tDisable the installation of the Wireless Access Point\r\n"
 
 if [ ${EUID} != 0 ]
 then
@@ -118,8 +119,9 @@ fi
 # The command line options which are documented by the USAGE
 # string.  Best seen by running: "restart -h"
 #####################################################################
-optionargs="hrov:n:f:c:s:p:"
+optionargs="hrowv:n:f:c:s:p:"
 optionalpackages=0
+installwap=1
 
 while getopts ${optionargs} name
 do
@@ -154,6 +156,9 @@ do
 		r)
 			skip_remove=1
 			;;
+		w)
+			installwap=0
+			;;
 		\?)
 			errecho "-e" ${LINENO} "invalid option: -${OPTARG}"
 			errecho "-e" ${LINENO} ${USAGE}
@@ -175,21 +180,30 @@ topclient=$(expr ${lowclient} \+ ${numclients} \- 1)
 # This is the list of packages I find generally useful.
 # only the last set of packages are needed for the WiFi setup
 #####################################################################
-PLIST="${PLIST} hostapd dnsmasq bridge-utils"
+if [ ${installwap} -eq 1 ]
+then
+	PLIST="${PLIST} hostapd dnsmasq bridge-utils"
+fi
 if [ ${optionalpackages} -eq 1 ]
 then
 	PLIST="${PLIST} dos2unix synaptic vim-gtk3 clang autoconf gdebi"
 	PLIST="${PLIST} doxygen asciidoc asciidoctor ps2eps ghostscript"
 	PLIST="${PLIST} indent libtool automake autoconf gfortran"
+	PLIST="${PLIST} git git-cola"
 fi
-
-
+	
+	
 #####################################################################
 # STEP 0-A - not explicitly in the article
 #
 # First we remove all of the packages in the list
 # Start with a clean slate
 #####################################################################
+if [ \( ${installwap} -eq 0 \) -a \( ${optionalpackages} -eq 0 \) ]
+then
+	errecho ${LINENO} "installwap=${installwap} and optionalpackages=${optionalpackages}, nothing to do"
+	exit 0
+fi
 if [ "${skip_remove}" = "0" ]
 then
 	sudo apt-get remove -y ${PLIST}
@@ -218,9 +232,16 @@ sudo apt-get -y upgrade
 #
 # Now we install all of the packages
 #####################################################################
+if [ $RPI_VERBOSE -gt 0 ]
+then
+	echo sudo apt-get install -y ${PLIST}
+fi
 sudo apt-get install -y ${PLIST}
-sudo systemctl stop hostapd
-sudo systemctl stop dnsmasq
+if [ ${installwap} -eq 1 ]
+then
+	sudo systemctl stop hostapd
+	sudo systemctl stop dnsmasq
+fi
 
 #####################################################################
 # Briefly here is the pattern for all of the updates
@@ -240,234 +261,237 @@ sudo systemctl stop dnsmasq
 #          to see the options
 # Configure DHCP
 #####################################################################
-DHCPCONFIG="/etc/dhcpcd.conf"
-DHCPORIG=${DHCPCONFIG}.orig
-DHCPNEW="/tmp/$(basename ${DHCPCONFIG}).$$.new"
-DHCPCOPY="/tmp/$(basename ${DHCPCONFIG}).$$.copy"
-DHCPGROUP="netdev"
-if [ "${skip_remove}" = "0" ]
+if [ ${installwap} -eq 1 ]
 then
-	sudo rm -rf ${DHCPORIG}
+	DHCPCONFIG="/etc/dhcpcd.conf"
+	DHCPORIG=${DHCPCONFIG}.orig
+	DHCPNEW="/tmp/$(basename ${DHCPCONFIG}).$$.new"
+	DHCPCOPY="/tmp/$(basename ${DHCPCONFIG}).$$.copy"
+	DHCPGROUP="netdev"
+	if [ "${skip_remove}" = "0" ]
+	then
+		sudo rm -rf ${DHCPORIG}
+	fi
+	
+	if [ ! -r ${DHCPORIG} ]
+	then
+		sudo mv ${DHCPCONFIG} ${DHCPORIG}
+	fi
+	#####################################################################
+	# I had challenges with "here" documents, so I did the following
+	#####################################################################
+	sudo echo "interface wlan0" > ${DHCPNEW}
+	sudo echo "static ip_address=${class3network}.${defaultclient}/24" >> ${DHCPNEW}
+	sudo echo "denyinterfaces eth0" >> ${DHCPNEW}
+	sudo echo "denyinterfaces wlan0" >> ${DHCPNEW}
+	
+	#####################################################################
+	# Add the above lines to the end of the original file
+	#####################################################################
+	sudo cat ${DHCPORIG} ${DHCPNEW} > ${DHCPCOPY}
+	
+	#####################################################################
+	# Put the copy as an overwrite on the file.
+	#####################################################################
+	sudo mv ${DHCPCOPY} ${DHCPCONFIG}
+	
+	#####################################################################
+	# Make sure the permissions match and cleanup
+	#####################################################################
+	sudo chgrp ${DHCPGROUP} ${DHCPCONFIG}
+	sudo chmod g+w ${DHCPCONFIG}
+	sudo rm ${DHCPNEW}
+	
+	verifychange "DHCP" ${DHCPORIG} ${DHCPCONFIG} "01"
+	
+	#####################################################################
+	# Step - 4 Configure the DHCP server (dnsmasq)
+	#
+	# Configure DNS MASQ
+	# Note the use fo the command line arguments.  Note that this script
+	# only handles class 3 networks.  A potential future bug
+	#####################################################################
+	DNSMASQ="/etc/dnsmasq.conf"
+	DNSMASQNEW="/tmp/$(basename ${DHCPCONFIG}).$$.new"
+	DNSMASQCOPY="/tmp/$(basename ${DHCPCONFIG}).$$.copy"
+	if [ "${skip_remove}" = "0" ]
+	then
+		sudo rm -rf ${DNSMASQ}.orig
+	fi
+	if [ ! -r ${DNSMASQ}.orig ]
+	then
+		sudo cp ${DNSMASQ} ${DNSMASQ}.orig
+	fi
+	sudo chmod 644 ${DNSMASQ}
+	sudo echo "# set up 24 hour leases for dhcp clients" > ${DNSMASQNEW}
+	sudo echo "interface=wlan0" >> ${DNSMASQNEW}
+	sudo echo "	dhcp-range=${class3network}.${lowclient},${class3network}.${topclient},255.255.255.0,24h" >> ${DNSMASQNEW}
+	sudo cat ${DNSMASQ}.orig ${DNSMASQNEW} > ${DNSMASQCOPY}
+	sudo mv ${DNSMASQCOPY} ${DNSMASQ}
+	sudo chown root ${DNSMASQ}
+	sudo chgrp root ${DNSMASQ}
+	
+	verifychange "DNSMASQ" ${DNSMASQ}.orig ${DNSMASQ} "02"
+	
+	#####################################################################
+	# STEP - 5 Configure the access point host software (hostapd)
+	#
+	# Configure the access point software
+	#####################################################################
+	HOSTAPD="/etc/default/hostapd"
+	HOSTAPDCONF="/etc/hostapd/hostapd.conf"
+	HOSTNEW="/tmp/hostapd.conf.new"
+	sudo rm -rf ${HOSTNEW}
+	sudo echo "interface=wlan0" >> ${HOSTNEW}
+	sudo echo "bridge=br0" >> ${HOSTNEW}
+	sudo echo "hw_mode=g" >> ${HOSTNEW}
+	sudo echo "channel=7" >> ${HOSTNEW}
+	sudo echo "wmm_enabled=0" >> ${HOSTNEW}
+	sudo echo "macaddr_acl=0" >> ${HOSTNEW}
+	sudo echo "auth_algs=1" >> ${HOSTNEW}
+	sudo echo "ignore_broadcast_ssid=0" >> ${HOSTNEW}
+	sudo echo "wpa=2" >> ${HOSTNEW}
+	sudo echo "wpa_key_mgmt=WPA-PSK" >> ${HOSTNEW}
+	sudo echo "wpa_pairwise=TKIP" >> ${HOSTNEW}
+	sudo echo "rsn_pairwise=CCMP" >> ${HOSTNEW}
+	sudo echo "ssid=${SSID}" >> ${HOSTNEW}
+	sudo echo "wpa_passphrase=${wpa_passphrase}" >> ${HOSTNEW}
+	
+	sudo mv ${HOSTNEW} ${HOSTAPDCONF}
+	sudo chmod 644 ${HOSTAPDCONF}
+	
+	if [ "${skip_remove}" = "0" ]
+	then
+		sudo rm -rf ${HOSTAPD}.orig
+		sudo rm -rf ${HOSTAPDCONF}.orig
+	fi
+	if [ ! -r ${HOSTAPD}.orig ]
+	then
+		sudo cp ${HOSTAPD} ${HOSTAPD}.orig
+	fi
+	if [ ! -r ${HOSTAPDCONF}.orig ]
+	then
+		sudo cp ${HOSTAPDCONF} ${HOSTAPDCONF}.orig
+	fi
+	sudo sed -e "s,^#DAEMON_CONF.*,DAEMON_CONF=${HOSTAPDCONF}," < ${HOSTAPD}.orig > ${HOSTAPD}.copy
+	sudo mv ${HOSTAPD}.copy ${HOSTAPD}
+	verifychange "HOSTAPD" ${HOSTAPD}.orig ${HOSTAPD} "03"
+	verifychange "HOSTAPDCONF" "${HOSTAPDCONF}.orig" "${HOSTAPDCONF}" "03A"
+	
+	#####################################################################
+	# STEP 6 - Set up traffic forwarding
+	#
+	# Set up Traffic Forwarding
+	#####################################################################
+	SYSCTLCONF="/etc/sysctl.conf"
+	SYSCTLCONFORIG="${SYSCTLCONF}.orig"
+	SYSCTLCONFNEW="${SYSCTLCONF}.new"
+	if [ "${skip_remove}" = "0" ]
+	then
+		sudo rm -rf ${SYSCTLCONFORIG}
+	fi
+	if [ ! -r ${SYSCTLCONFORIG} ]
+	then
+		sudo cp ${SYSCTLCONF} ${SYSCTLCONFORIG}
+	fi
+	sudo sed -e "s,#\(net\.ipv4\.ip_forward=1\),\1," < ${SYSCTLCONFORIG} > ${SYSCTLCONF}.new
+	sudo mv ${SYSCTLCONF}.new ${SYSCTLCONF}
+	sudo chown root ${SYSCTLCONF}
+	sudo chgrp root ${SYSCTLCONF}
+	sudo chmod 755 ${SYSCTLCONF}
+	verifychange "SYSCTL" ${SYSCTLCONFORIG} ${SYSCTLCONF} "04"
+	
+	#####################################################################
+	# STEP 7 - Add a new iptables rule
+	#####################################################################
+	IP4TABLES="/etc/iptables.ipv4.nat"
+	RCLOCAL="/etc/rc.local"
+	RCLOCALNEW=/tmp/$(basename ${RCLOCAL}).new
+	RCLOCALORIG="${RCLOCAL}.orig"
+	if [ "${skip_remove}" = "0" ]
+	then
+		sudo rm -rf ${RCLOCALORIG}
+		sudo rm -rf ${IP4TABLES}.orig
+	fi
+	if [ ! -r ${IP4TABLES}.orig ]
+	then
+		sudo sh -c "iptables-save > ${IP4TABLES}.orig"
+	fi
+	sudo iptables-restore < ${IP4TABLES}.orig
+	if [ ! -r ${RCLOCALORIG} ]
+	then
+		sudo mv ${RCLOCAL} ${RCLOCALORIG}
+	fi
+	sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+	sudo sh -c "iptables-save > ${IP4TABLES}"
+	sed -e "/^exit 0$/d" < ${RCLOCALORIG} > ${RCLOCALNEW}
+	sudo echo "iptables-restore < ${IP4TABLES}" >> ${RCLOCALNEW}
+	sudo echo "exit 0" >> ${RCLOCALNEW}
+	sudo mv ${RCLOCALNEW} ${RCLOCAL}
+	sudo chown root ${RCLOCAL}
+	sudo chgrp root ${RCLOCAL}
+	
+	#####################################################################
+	# Make sure that the execute bits are turned on for rc.local or it
+	# will never be run.
+	#####################################################################
+	sudo chmod 744 ${RCLOCAL}
+	
+	verifychange "RCLOCAL" ${RCLOCALORIG} ${RCLOCAL} "05"
+	
+	verifychange "IP4TABLES" ${IP4TABLES}.orig ${IP4TABLES} "06"
+	
+	#####################################################################
+	# STEP 8 -nHandle Bridging
+	# The following code which sends output to /dev/null is only
+	# run if a prior run left a bridge up and open.  Note the steps
+	# with systemctl below to get the hostapd and dnsmasq restarted.
+	# With those additions, you may not need to reboot.
+	#####################################################################
+	
+	sudo brctl delif br0 eth0 2>&1 > /dev/null
+	sudo ip link set br0 down 2>&1 > /dev/null
+	sudo brctl delbr br0 2>&1 > /dev/null
+	
+	
+	sudo brctl addbr br0
+	sudo brctl addif br0 eth0
+	
+	#####################################################################
+	# Set up the network interfaces for bridging
+	#####################################################################
+	NETINTER="/etc/network/interfaces"
+	NETINTERORIG="${NETINTER}.orig"
+	if [ "${skip_remove}" = "0" ]
+	then
+		sudo rm -rf ${NETINTERORIG}
+	fi
+	if [ ! -r ${NETINTERORIG} ]
+	then
+		sudo mv ${NETINTER} ${NETINTERORIG}
+	fi
+	
+	sudo echo "auto br0" > ${NETINTER}.new
+	sudo echo "iface br0 inet manual" >> ${NETINTER}.new
+	sudo echo "bridge_ports eth0 wlan0" >> ${NETINTER}.new
+	sudo echo "$scriptname:$LINENO"
+	sudo cat ${NETINTERORIG} ${NETINTER}.new > ${NETINTER}.copy
+	sudo mv ${NETINTER}.copy ${NETINTER}
+	sudo chown root ${NETINTER}
+	sudo chgrp root ${NETINTER}
+	
+	#####################################################################
+	# I found this solution in:
+	# https://www.raspberrypi.org/forums/viewtopic.php?t=235598
+	# This solved a problem that I had been having for days!
+	#####################################################################
+	sudo systemctl unmask hostapd
+	sudo systemctl enable hostapd
+	sudo systemctl start hostapd
+	sudo systemctl start dnsmasq
+	
+	verifychange "NETINTER" ${NETINTERORIG} ${NETINTER} "07"
 fi
-
-if [ ! -r ${DHCPORIG} ]
-then
-	sudo mv ${DHCPCONFIG} ${DHCPORIG}
-fi
-#####################################################################
-# I had challenges with "here" documents, so I did the following
-#####################################################################
-sudo echo "interface wlan0" > ${DHCPNEW}
-sudo echo "static ip_address=${class3network}.${defaultclient}/24" >> ${DHCPNEW}
-sudo echo "denyinterfaces eth0" >> ${DHCPNEW}
-sudo echo "denyinterfaces wlan0" >> ${DHCPNEW}
-
-#####################################################################
-# Add the above lines to the end of the original file
-#####################################################################
-sudo cat ${DHCPORIG} ${DHCPNEW} > ${DHCPCOPY}
-
-#####################################################################
-# Put the copy as an overwrite on the file.
-#####################################################################
-sudo mv ${DHCPCOPY} ${DHCPCONFIG}
-
-#####################################################################
-# Make sure the permissions match and cleanup
-#####################################################################
-sudo chgrp ${DHCPGROUP} ${DHCPCONFIG}
-sudo chmod g+w ${DHCPCONFIG}
-sudo rm ${DHCPNEW}
-
-verifychange "DHCP" ${DHCPORIG} ${DHCPCONFIG} "01"
-
-#####################################################################
-# Step - 4 Configure the DHCP server (dnsmasq)
-#
-# Configure DNS MASQ
-# Note the use fo the command line arguments.  Note that this script
-# only handles class 3 networks.  A potential future bug
-#####################################################################
-DNSMASQ="/etc/dnsmasq.conf"
-DNSMASQNEW="/tmp/$(basename ${DHCPCONFIG}).$$.new"
-DNSMASQCOPY="/tmp/$(basename ${DHCPCONFIG}).$$.copy"
-if [ "${skip_remove}" = "0" ]
-then
-	sudo rm -rf ${DNSMASQ}.orig
-fi
-if [ ! -r ${DNSMASQ}.orig ]
-then
-	sudo cp ${DNSMASQ} ${DNSMASQ}.orig
-fi
-sudo chmod 644 ${DNSMASQ}
-sudo echo "# set up 24 hour leases for dhcp clients" > ${DNSMASQNEW}
-sudo echo "interface=wlan0" >> ${DNSMASQNEW}
-sudo echo "	dhcp-range=${class3network}.${lowclient},${class3network}.${topclient},255.255.255.0,24h" >> ${DNSMASQNEW}
-sudo cat ${DNSMASQ}.orig ${DNSMASQNEW} > ${DNSMASQCOPY}
-sudo mv ${DNSMASQCOPY} ${DNSMASQ}
-sudo chown root ${DNSMASQ}
-sudo chgrp root ${DNSMASQ}
-
-verifychange "DNSMASQ" ${DNSMASQ}.orig ${DNSMASQ} "02"
-
-#####################################################################
-# STEP - 5 Configure the access point host software (hostapd)
-#
-# Configure the access point software
-#####################################################################
-HOSTAPD="/etc/default/hostapd"
-HOSTAPDCONF="/etc/hostapd/hostapd.conf"
-HOSTNEW="/tmp/hostapd.conf.new"
-sudo rm -rf ${HOSTNEW}
-sudo echo "interface=wlan0" >> ${HOSTNEW}
-sudo echo "bridge=br0" >> ${HOSTNEW}
-sudo echo "hw_mode=g" >> ${HOSTNEW}
-sudo echo "channel=7" >> ${HOSTNEW}
-sudo echo "wmm_enabled=0" >> ${HOSTNEW}
-sudo echo "macaddr_acl=0" >> ${HOSTNEW}
-sudo echo "auth_algs=1" >> ${HOSTNEW}
-sudo echo "ignore_broadcast_ssid=0" >> ${HOSTNEW}
-sudo echo "wpa=2" >> ${HOSTNEW}
-sudo echo "wpa_key_mgmt=WPA-PSK" >> ${HOSTNEW}
-sudo echo "wpa_pairwise=TKIP" >> ${HOSTNEW}
-sudo echo "rsn_pairwise=CCMP" >> ${HOSTNEW}
-sudo echo "ssid=${SSID}" >> ${HOSTNEW}
-sudo echo "wpa_passphrase=${wpa_passphrase}" >> ${HOSTNEW}
-
-sudo mv ${HOSTNEW} ${HOSTAPDCONF}
-sudo chmod 644 ${HOSTAPDCONF}
-
-if [ "${skip_remove}" = "0" ]
-then
-	sudo rm -rf ${HOSTAPD}.orig
-	sudo rm -rf ${HOSTAPDCONF}.orig
-fi
-if [ ! -r ${HOSTAPD}.orig ]
-then
-	sudo cp ${HOSTAPD} ${HOSTAPD}.orig
-fi
-if [ ! -r ${HOSTAPDCONF}.orig ]
-then
-	sudo cp ${HOSTAPDCONF} ${HOSTAPDCONF}.orig
-fi
-sudo sed -e "s,^#DAEMON_CONF.*,DAEMON_CONF=${HOSTAPDCONF}," < ${HOSTAPD}.orig > ${HOSTAPD}.copy
-sudo mv ${HOSTAPD}.copy ${HOSTAPD}
-verifychange "HOSTAPD" ${HOSTAPD}.orig ${HOSTAPD} "03"
-verifychange "HOSTAPDCONF" "${HOSTAPDCONF}.orig" "${HOSTAPDCONF}" "03A"
-
-#####################################################################
-# STEP 6 - Set up traffic forwarding
-#
-# Set up Traffic Forwarding
-#####################################################################
-SYSCTLCONF="/etc/sysctl.conf"
-SYSCTLCONFORIG="${SYSCTLCONF}.orig"
-SYSCTLCONFNEW="${SYSCTLCONF}.new"
-if [ "${skip_remove}" = "0" ]
-then
-	sudo rm -rf ${SYSCTLCONFORIG}
-fi
-if [ ! -r ${SYSCTLCONFORIG} ]
-then
-	sudo cp ${SYSCTLCONF} ${SYSCTLCONFORIG}
-fi
-sudo sed -e "s,#\(net\.ipv4\.ip_forward=1\),\1," < ${SYSCTLCONFORIG} > ${SYSCTLCONF}.new
-sudo mv ${SYSCTLCONF}.new ${SYSCTLCONF}
-sudo chown root ${SYSCTLCONF}
-sudo chgrp root ${SYSCTLCONF}
-sudo chmod 755 ${SYSCTLCONF}
-verifychange "SYSCTL" ${SYSCTLCONFORIG} ${SYSCTLCONF} "04"
-
-#####################################################################
-# STEP 7 - Add a new iptables rule
-#####################################################################
-IP4TABLES="/etc/iptables.ipv4.nat"
-RCLOCAL="/etc/rc.local"
-RCLOCALNEW=/tmp/$(basename ${RCLOCAL}).new
-RCLOCALORIG="${RCLOCAL}.orig"
-if [ "${skip_remove}" = "0" ]
-then
-	sudo rm -rf ${RCLOCALORIG}
-	sudo rm -rf ${IP4TABLES}.orig
-fi
-if [ ! -r ${IP4TABLES}.orig ]
-then
-	sudo sh -c "iptables-save > ${IP4TABLES}.orig"
-fi
-sudo iptables-restore < ${IP4TABLES}.orig
-if [ ! -r ${RCLOCALORIG} ]
-then
-	sudo mv ${RCLOCAL} ${RCLOCALORIG}
-fi
-sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-sudo sh -c "iptables-save > ${IP4TABLES}"
-sed -e "/^exit 0$/d" < ${RCLOCALORIG} > ${RCLOCALNEW}
-sudo echo "iptables-restore < ${IP4TABLES}" >> ${RCLOCALNEW}
-sudo echo "exit 0" >> ${RCLOCALNEW}
-sudo mv ${RCLOCALNEW} ${RCLOCAL}
-sudo chown root ${RCLOCAL}
-sudo chgrp root ${RCLOCAL}
-
-#####################################################################
-# Make sure that the execute bits are turned on for rc.local or it
-# will never be run.
-#####################################################################
-sudo chmod 744 ${RCLOCAL}
-
-verifychange "RCLOCAL" ${RCLOCALORIG} ${RCLOCAL} "05"
-
-verifychange "IP4TABLES" ${IP4TABLES}.orig ${IP4TABLES} "06"
-
-#####################################################################
-# STEP 8 -nHandle Bridging
-# The following code which sends output to /dev/null is only
-# run if a prior run left a bridge up and open.  Note the steps
-# with systemctl below to get the hostapd and dnsmasq restarted.
-# With those additions, you may not need to reboot.
-#####################################################################
-
-sudo brctl delif br0 eth0 2>&1 > /dev/null
-sudo ip link set br0 down 2>&1 > /dev/null
-sudo brctl delbr br0 2>&1 > /dev/null
-
-
-sudo brctl addbr br0
-sudo brctl addif br0 eth0
-
-#####################################################################
-# Set up the network interfaces for bridging
-#####################################################################
-NETINTER="/etc/network/interfaces"
-NETINTERORIG="${NETINTER}.orig"
-if [ "${skip_remove}" = "0" ]
-then
-	sudo rm -rf ${NETINTERORIG}
-fi
-if [ ! -r ${NETINTERORIG} ]
-then
-	sudo mv ${NETINTER} ${NETINTERORIG}
-fi
-
-sudo echo "auto br0" > ${NETINTER}.new
-sudo echo "iface br0 inet manual" >> ${NETINTER}.new
-sudo echo "bridge_ports eth0 wlan0" >> ${NETINTER}.new
-sudo echo "$scriptname:$LINENO"
-sudo cat ${NETINTERORIG} ${NETINTER}.new > ${NETINTER}.copy
-sudo mv ${NETINTER}.copy ${NETINTER}
-sudo chown root ${NETINTER}
-sudo chgrp root ${NETINTER}
-
-#####################################################################
-# I found this solution in:
-# https://www.raspberrypi.org/forums/viewtopic.php?t=235598
-# This solved a problem that I had been having for days!
-#####################################################################
-sudo systemctl unmask hostapd
-sudo systemctl enable hostapd
-sudo systemctl start hostapd
-sudo systemctl start dnsmasq
-
-verifychange "NETINTER" ${NETINTERORIG} ${NETINTER} "07"
 echo "Enter 'sudo reboot now' if you are happy with the changes so far."
 #####################################################################
 #
