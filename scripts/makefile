@@ -1,20 +1,16 @@
-# BIN=~/piwap/bin
 .sh:
-	ln $< $@
-#	install -g piwap -o pi -C $@ $(EXECDIR)
-INSTALL = func.pathmunge pathmunge restart func.errecho func.getprojdir \
-				func.verifychange sourcedate 
+	rm -f $@
+	cp $< $@
+INSTALL = func.pathmunge pathmunge func.errecho func.getprojdir \
+				func.verifychange sourcedate restart
 PROJECT := piwap
+
 EXECDIR := $(HOME)/$(PROJECT)/bin
-#EXECS := $(addprefix $(EXECDIR)/,$(INSTALL))
 all: $(INSTALL)
 restart: func.errecho func.verifychange
-install: $(EXECS)
-	install -g piwap -o pi -C $< $(EXECDIR)
-#	rm $<
+install: $(INSTALL)
+	install -g $(PROJECT) -o $(USER) -C $? $(EXECDIR)
 clean: $(INSTALL)
-	rm $<
+	rm $^
 $(EXECDIR):
 	mkdir -p $(EXECDIR)
-$(EXECS): $(INSTALL)
-	install -g piwap -o pi -C $@ $(EXECDIR)
