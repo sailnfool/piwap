@@ -63,11 +63,8 @@
 #####################################################################
 # A number of functions to support BASH software development
 #####################################################################
-# source rpi.functions
 source func.errecho
 source func.verifychange
-
-
 #####################################################################
 # These defaults affect Step 4 (see below) but can be overridden
 # on the command line.
@@ -360,6 +357,32 @@ then
 	sudo echo "rsn_pairwise=CCMP" >> ${HOSTNEW}
 	sudo echo "ssid=${SSID}" >> ${HOSTNEW}
 	sudo echo "wpa_passphrase=${wpa_passphrase}" >> ${HOSTNEW}
+# 	cat <<End-of-HERE-hostapd_conf_new
+# interface=wlan0
+# bridge=br0
+# hw_mode=g
+# channel=7
+# wmm_enabled=0
+# macaddr_acl=0
+# auth_algs=1
+# ignore_broadcast_ssid=0
+# wpa=2
+# wpa_key_mgmt=WPA-PSK
+# wpa_pairwise=TKIP
+# rsn_pairwise=CCMP
+# ssid=${SSID}
+# wpa_passphrase=${wpa_passphrase}
+# End-of-HERE-hostapd_conf_new
+# ) > ${HOSTNEW}.new
+if [ -f ${HOSTNEW}.new ]
+then
+	echo comparing here docs
+	diff ${HOSTNEW} ${HOSTNEW}.new
+	if [ $? -eq 0 ]
+	then
+		errecho ${LINENO} SUCCESS ON HERE DOC
+	fi
+fi
 	
 	sudo mv ${HOSTNEW} ${HOSTAPDCONF}
 	sudo chmod 644 ${HOSTAPDCONF}
