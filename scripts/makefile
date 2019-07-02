@@ -1,16 +1,25 @@
 .sh:
 	rm -f $@
 	cp $< $@
-INSTALL = func.pathmunge pathmunge func.errecho func.getprojdir \
-				func.verifychange sourcedate restart
+PREFIX=func
+INSTALL = $(PREFIX).cwave $(PREFIX).errecho $(PREFIX).gen_range \
+					$(PREFIX).getprojdir $(PREFIX).insufficient \
+					$(PREFIX).onefilereformat $(PREFIX).pathmunge \
+					$(PREFIX).stderrecho $(PREFIX).verifychange \
+					sourcedate restart pathmunge
 PROJECT := piwap
 
-EXECDIR := $(HOME)/$(PROJECT)/bin
+PROJPATH=/usr/local
+EXECDIR := $(PROJPATH)/sbin
 all: $(INSTALL)
-restart: func.errecho func.verifychange
+restart: $(PREFIX).errecho $(PREFIX).verifychange
 install: $(INSTALL)
-	install -g $(PROJECT) -o $(USER) -C $? $(EXECDIR)
+	sudo install -g $(PROJECT) -o $(USER) -C $? $(EXECDIR)
 clean: $(INSTALL)
 	rm $^
 $(EXECDIR):
-	mkdir -p $(EXECDIR)
+	sudo mkdir -p $(EXECDIR)
+	sudo addgroup $(PROJECT)
+	sudo chown root $(EXECDIR)
+	sudo chgrp $(PROJECT) $(EXECDIR)
+	sudo chmod g+rwx $(EXECDIR)
