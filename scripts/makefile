@@ -1,16 +1,31 @@
+SHELL=/bin/bash
 .sh:
-	rm -f $@
+	@rm -f $@
 	cp $< $@
-INSTALL = func.pathmunge pathmunge func.errecho func.getprojdir \
-				func.verifychange sourcedate restart
-PROJECT := piwap
 
-EXECDIR := $(HOME)/$(PROJECT)/bin
+INSTALL = pkginstall
+
+PROJECT := func
+
+EXECDIR := $(HOME)/bin
+
+.PHONY: clean uninstall all
 all: $(INSTALL)
-restart: func.errecho func.verifychange
 install: $(INSTALL)
+	mkdir -p $(EXECDIR)
 	install -g $(PROJECT) -o $(USER) -C $? $(EXECDIR)
-clean: $(INSTALL)
-	rm $^
+clean: 
+	@for execfile in $(INSTALL); do \
+		echo rm -f $$execfile; \
+		rm -f $$execfile; \
+	done
+uninstall: 
+	@for execfile in $(INSTALL); do \
+		echo rm -f $(EXECDIR)/$$execfile; \
+		rm -f $(EXECDIR)/$$execfile; \
+	done
+project:
+	proj_setup $(PROJECT)
 $(EXECDIR):
 	mkdir -p $(EXECDIR)
+
