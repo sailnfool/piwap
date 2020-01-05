@@ -1,6 +1,7 @@
-if [ -z "{__errecho}" ]
+#! /bin/bash
+if [ -z "${__errecho_sh}" ]
 then
-	export __errecho=1
+	export __errecho_sh=1
 	##########
 	# This function is invoked as in the example below:
 	# errecho $LINENO "some error message " "with more text"

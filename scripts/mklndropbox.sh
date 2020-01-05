@@ -50,7 +50,7 @@ scriptname=${0##*/}
 #_____________________________________________________________________
 #
 
-source rpi.functions
+source func.errecho
 
 USAGE="\r\n${scriptname} [-[hn]] [ -v <#> ] [-i <ignoredir> ] ... ] <dirname>\r\n
 \t\tlinks each of the text files in the directory to a name prefixed\r\n

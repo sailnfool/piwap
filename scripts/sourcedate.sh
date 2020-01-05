@@ -74,7 +74,8 @@ scriptname=${0##*/}
 #	see 'man stat'
 #
 
-source rpi.functions
+#source rpi.functions
+source func.errecho
 
 USAGE="\r\n${scriptname} [-[hotn]] [ -v <#> ] [ [-i <ignoredir> ] ... ] <dirname>\r\n
 \t\treturn the date of the newest file in the tree\r\n
@@ -210,11 +211,4 @@ else
 fi
 rm -f /tmp/sourcedate.newest.$$*
 
-# if [ "${addtime}" = "0" ]
-
-# then
-# 	find ${dirname} ${nodirs} -exec stat \{\} --printf="%y\n" \; | sort -n -r | head -1 | sed -e 's/ .*//' -e 's/-//g'
-# else
-# 	find ${dirname} ${nodirs} -exec stat \{\} --printf="%y\n" \; | sort -n -r | head -1 | sed -e 's/\..*//' -e 's/ /./' -e 's/-//g' -e 's/://g'
-# fi
 # vim: set syntax=bash

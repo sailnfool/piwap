@@ -28,4 +28,3 @@ project:
 	proj_setup $(PROJECT)
 $(EXECDIR):
 	mkdir -p $(EXECDIR)
-
