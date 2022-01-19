@@ -5,7 +5,7 @@ SHELL=/bin/bash
 
 INSTALL = pkginstall
 
-PROJECT := func
+PROJECT := rnovak
 
 EXECDIR := $(HOME)/bin
 
