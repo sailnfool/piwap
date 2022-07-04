@@ -44,9 +44,9 @@ scriptname=${0##*/}
 #               prefixed by the current date and time of the most recent
 #               timestamp for the directory
 #_____________________________________________________________________
-# Rev.|Auth.| Date       | Notes
+# Rev.|Aut| Date       | Notes
 #_____________________________________________________________________
-# 1.0 | REN | 04/12/2019 | Initial Release
+# 1.0 |REN| 04/12/2019 | Initial Release
 #_____________________________________________________________________
 #
 

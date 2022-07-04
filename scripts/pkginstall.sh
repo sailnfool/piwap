@@ -54,13 +54,13 @@
 #           as a wireless access point"
 # https://thepi.io/how-to-use-your-raspberry-pi-as-a-wireless-access-point
 #_____________________________________________________________________
-# Rev.|Auth.| Date       | Notes
+# Rev.|Aut| Date       | Notes
 #_____________________________________________________________________
-# 1.2 | REN | 06/23/2019 | changed from Piwap to pkginstall to 
+# 1.2 |REN| 06/23/2019 | changed from Piwap to pkginstall to 
 #                        | install my favorite packges on a new
 #                        | new machine
-# 1.1 | REN | 04/08/2019 | Added command line parameters
-# 1.0 | REN | 04/06/2019 | Initial release
+# 1.1 |REN| 04/08/2019 | Added command line parameters
+# 1.0 |REN| 04/06/2019 | Initial release
 #_____________________________________________________________________
 #
 #####################################################################
